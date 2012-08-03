@@ -7,6 +7,7 @@
 ;; (define-type Env (Listof (Pair Symbol Val)))
 (define Env? (listof (cons/c symbol? Val?)))
 
+(provide eval)
 (define/contract (eval program) (-> Prog? Val?)
   (match-define (Prog fdefs main) program)
   
