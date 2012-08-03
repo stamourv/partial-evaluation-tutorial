@@ -24,11 +24,14 @@
            (eval-expr then env)
            (eval-expr else env))]
       [(Apply f es)
-       (match-define (FDef _ args body) (lookup-func f fdefs))
-       (define new-env
-         (append (for/list ([a args] [e es]) (cons a (eval-expr e env)))
-                 env))
-       (eval-expr body new-env)]))
+       (match (assq f fdefs)
+         [`(,_ . ,(Func args body))
+          (define new-env
+            (append (for/list ([a args] [e es]) (cons a (eval-expr e env)))
+                    env))
+          (eval-expr body new-env)]
+         [#f
+          (error "unbound variable" f)])]))
 
   (eval-expr main empty))
 
@@ -52,14 +55,15 @@
                 1)
 
   (define base-env
-    `(,(FDef 'exp '(x n)
-             (If (Prim '= `(,(Var 'n) ,(Const 0)))
-                 (Const 1)
-                 (Prim '* `(,(Var 'x)
-                            ,(Apply 'exp
-                                    `(,(Var 'x)
-                                      ,(Prim '- `(,(Var 'n)
-                                                  ,(Const 1)))))))))))
+    `((exp
+       . ,(Func '(x n)
+                (If (Prim '= `(,(Var 'n) ,(Const 0)))
+                    (Const 1)
+                    (Prim '* `(,(Var 'x)
+                               ,(Apply 'exp
+                                       `(,(Var 'x)
+                                         ,(Prim '- `(,(Var 'n)
+                                                     ,(Const 1))))))))))))
 
   (define exp-prog
     (Prog base-env (Apply 'exp `(,(Const 2) ,(Const 3)))))

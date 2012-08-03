@@ -4,15 +4,8 @@
 
 (struct: Prog ([defs : (Listof FDef)] [body : Expr]))
 
-(struct: FDef ([name : Symbol] [args : (Listof Symbol)] [body : Expr]))
-(define: (lookup-func [f : Symbol] [env : (Listof FDef)]) : FDef
-  (match env
-    ['()
-     (error "unbound variable" f)]
-    [(cons (and def (FDef (== f) args body)) rest)
-     def]
-    [_
-     (lookup-func f (rest env))]))
+(define-type FDef (Pair Symbol Func))
+(struct: Func ([args : (Listof Symbol)] [body : Expr]))
 
 (define-type Val (U Integer Boolean))
 (define-predicate Val? Val)
