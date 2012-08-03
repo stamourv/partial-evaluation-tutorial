@@ -1,24 +1,24 @@
-#lang racket
+#lang typed/racket
 
 (require "exp.rkt")
+(require/typed "prim.rkt" [prim (Op (Listof Val) -> Val)])
 
 ;; evaluator (not partial)
 
-;; (define-type Env (Listof (Pair Symbol Val)))
-(define Env? (listof (cons/c symbol? Val?)))
+(define-type Env (Listof (Pair Symbol Val)))
 
 (provide eval)
-(define/contract (eval program) (-> Prog? Val?)
+(define: (eval [program : Prog]) : Val
   (match-define (Prog fdefs main) program)
   
-  (define/contract (eval-expr expr env) (-> Expr? Env? Val?)
+  (define: (eval-expr [expr : Expr] [env : Env]) : Val
     (match expr
       [(Const val) val]
       [(Var var)   (match (assq var env)
                      [`(,_ . ,val) val]
                      [#f           (error "unbound variable" var)])]
       [(Prim op es)
-       (define rs (for/list ([e es]) (eval-expr e env)))
+       (define rs (for/list: : (Listof Val) ([e : Expr es]) (eval-expr e env)))
        (prim op rs)]
       [(If test then else)
        (if (eval-expr test env)
@@ -28,7 +28,8 @@
        (match (assq f fdefs)
          [`(,_ . ,(Func args body))
           (define new-env
-            (append (for/list ([a args] [e es]) (cons a (eval-expr e env)))
+            (append (for/list: : Env ([a : Symbol args] [e : Expr es])
+                      (cons a (eval-expr e env)))
                     env))
           (eval-expr body new-env)]
          [#f
@@ -36,16 +37,11 @@
 
   (eval-expr main empty))
 
-(provide prim)
-(define/contract (prim op vals) (-> Op? (listof Val?) Val?)
-  (apply (match op ['= =] ['+ +] ['- -] ['* *])
-         vals))
 
+(module* test typed/racket
+  (require typed/rackunit "exp.rkt" (submod ".."))
 
-(module+ test
-  (require rackunit)
-
-  (define (eval-no-env e) (eval (Prog '() e)))
+  (define: (eval-no-env [e : Expr]) : Val (eval (Prog '() e)))
   
   (check-equal? (eval-no-env (Const 0)) 0)
   (check-equal? (eval-no-env (Prim '= `(,(Const 0) ,(Const 0)))) #t)

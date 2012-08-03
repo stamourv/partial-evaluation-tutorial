@@ -1,23 +1,25 @@
-#lang racket
+#lang typed/racket
 
-(require "exp.rkt" "eval.rkt") ; latter for `prim'
+(require "exp.rkt")
+(require/typed "prim.rkt" [prim (Op (Listof Val) -> Val)])
 
 ;; naive partial evaluator
 
-;; (define-type Env (Listof (Pair Symbol Expr)))
-(define Env? (listof (cons/c symbol? Expr?)))
+(define-type Env (Listof (Pair Symbol Expr)))
 
-(define/contract (peval program) (-> Prog? Expr?)
+(provide peval)
+(define: (peval [program : Prog]) : Expr
   (match-define (Prog fdefs main) program)
   
-  (define/contract (peval-expr expr env) (-> Expr? Env? Expr?)
+  (define: (peval-expr [expr : Expr] [env : Env]) : Expr
     (match expr
       [(Const val) expr]
       [(Var var)   (match (assq var env)
                      [`(,_ . ,e) e]
                      [#f         expr])] ; dynamic, leave as is
       [(Prim op es)
-       (define rs (for/list ([e es]) (peval-expr e env)))
+       (define rs
+         (for/list: : (Listof Expr) ([e : Expr es]) (peval-expr e env)))
        (if (andmap Const? rs) ; all values
            (Const (prim op (map Const-val rs)))
            (Prim op rs))]
@@ -30,7 +32,8 @@
        (match (assq f fdefs)
          [`(,_ . ,(Func args body))
           (define new-env
-            (append (for/list ([a args] [e es]) (cons a (peval-expr e env)))
+            (append (for/list: : Env ([a : Symbol args] [e : Expr es])
+                      (cons a (peval-expr e env)))
                     env))
           (peval-expr body new-env)]
          [#f
@@ -39,10 +42,10 @@
   (peval-expr main empty))
 
 
-(module+ test
-  (require rackunit)
-
-  (define (peval-no-env e) (peval (Prog '() e)))
+(module* test typed/racket
+  (require typed/rackunit "exp.rkt" (submod "..") "eval.rkt")
+ 
+  (define: (peval-no-env [e : Expr]) : Expr (peval (Prog '() e)))
   
   (check-equal? (peval-no-env (Const 0)) (Const 0))
   (check-equal? (peval-no-env (Prim '= `(,(Const 0) ,(Const 0)))) (Const #t))
