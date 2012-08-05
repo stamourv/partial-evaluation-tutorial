@@ -33,7 +33,7 @@
          (match (assq f fdefs)
            [`(,_ . ,(Func args body)) (values args body)]
            [#f                        (error "unbound variable" f)]))
-       (define es* (map (lambda: ([e : Expr]) (peval-expr e env)) es))
+       (define es*     (map (lambda: ([e : Expr]) (peval-expr e env)) es))
        (define new-env (append (map (inst cons Symbol Expr) args es*) env))
        (peval-expr body new-env)]))
 
