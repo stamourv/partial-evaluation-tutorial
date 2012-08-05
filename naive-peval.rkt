@@ -29,15 +29,15 @@
          [(Const #f) (peval-expr else env)]
          [test*      (If test* (peval-expr then env) (peval-expr else env))])]
       [(Apply f es)
-       (match (assq f fdefs)
-         [`(,_ . ,(Func args body))
-          (define new-env
-            (append (for/list: : Env ([a : Symbol args] [e : Expr es])
-                      (cons a (peval-expr e env)))
-                    env))
-          (peval-expr body new-env)]
-         [#f
-          (error "unbound variable" f)])]))
+       (define-values (args body)
+         (match (assq f fdefs)
+           [`(,_ . ,(Func args body)) (values args body)]
+           [#f                        (error "unbound variable" f)]))
+       (define new-env
+         (append (for/list: : Env ([a : Symbol args] [e : Expr es])
+                            (cons a (peval-expr e env)))
+                 env))
+       (peval-expr body new-env)]))
 
   (peval-expr main empty))
 
