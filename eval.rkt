@@ -29,10 +29,8 @@
          (match (assq f fdefs)
            [`(,_ . ,(Func args body)) (values args body)]
            [#f                        (error "unbound variable" f)]))
-       (define new-env
-         (append (for/list: : Env ([a : Symbol args] [e : Expr es])
-                            (cons a (eval-expr e env)))
-                 env))
+       (define es* (map (lambda: ([e : Expr]) (eval-expr e env)) es))
+       (define new-env (append (map (inst cons Symbol Val) args es*) env))
        (eval-expr body new-env)]))
 
   (eval-expr main empty))
