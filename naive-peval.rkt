@@ -2,6 +2,8 @@
 
 (require "exp.rkt")
 (require/typed "prim.rkt" [prim (Op (Listof Val) -> Val)])
+(require/typed racket/dict
+  [dict-ref (All (A) ((Listof (Pair Symbol A)) Symbol (-> A) -> A))])
 
 ;; naive partial evaluator
 
@@ -14,9 +16,8 @@
   (define: (peval-expr [expr : Expr] [env : Env]) : Expr
     (match expr
       [(Const val) expr]
-      [(Var var)   (match (assq var env)
-                     [`(,_ . ,e) e]
-                     [#f         expr])] ; dynamic, leave as is
+      [(Var var) (dict-ref env var
+                           (lambda () expr))] ; dynamic, leave as is
       [(Prim op es)
        (define rs
          (for/list: : (Listof Expr) ([e : Expr es]) (peval-expr e env)))
@@ -29,10 +30,8 @@
          [(Const #f) (peval-expr else env)]
          [test*      (If test* (peval-expr then env) (peval-expr else env))])]
       [(Apply f es)
-       (define-values (args body)
-         (match (assq f fdefs)
-           [`(,_ . ,(Func args body)) (values args body)]
-           [#f                        (error "unbound variable" f)]))
+       (match-define (Func args body)
+         (dict-ref fdefs f (lambda () (error "unbound variable" f))))
        (define es*     (map (lambda: ([e : Expr]) (peval-expr e env)) es))
        (define new-env (append (map (inst cons Symbol Expr) args es*) env))
        (peval-expr body new-env)]))

@@ -2,6 +2,13 @@
 
 (require "exp.rkt")
 (require/typed "prim.rkt" [prim (Op (Listof Val) -> Val)])
+(require/typed racket/dict
+  [dict-ref (All (A) ((Listof (Pair Symbol A)) Symbol (-> A) -> A))]
+  [dict-set (All (A) ((Listof (Pair Symbol A)) Symbol A
+                      -> (Listof (Pair Symbol A))))]
+  [dict-has-key? (All (A) (Listof (Pair Symbol A)) Symbol -> Boolean)]
+  [dict-update (All (A) ((Listof (Pair Symbol A)) Symbol (A -> A)
+                         -> (Listof (Pair Symbol A))))])
 
 ;; final partial evaluator
 
@@ -16,9 +23,9 @@
   (define: (peval-expr [expr : Expr] [env : Env]) : Expr
     (match expr
       [(Const val) expr]
-      [(Var var)   (match (assq var env)
-                     [`(,_ . ,e) (Const e)]
-                     [#f         expr])] ; dynamic, leave as is
+      [(Var var)
+       (define val (dict-ref env var (lambda () #f)))
+       (if val (Const val) expr)] ; dynamic, leave as is
       [(Prim op es)
        (define rs
          (for/list: : (Listof Expr) ([e : Expr es]) (peval-expr e env)))
@@ -31,10 +38,8 @@
          [(Const #f) (peval-expr else env)]
          [test*      (If test* (peval-expr then env) (peval-expr else env))])]
       [(Apply f es)
-       (define-values (args body)
-         (match (assq f fdefs)
-           [`(,_ . ,(Func args body)) (values args body)]
-           [#f                        (error "unbound variable" f)]))
+       (match-define (Func args body)
+         (dict-ref fdefs f (lambda () (error "unbound variable" f))))
        (define es* (map (lambda: ([e : Expr]) (peval-expr e env)) es))
        ;; determine static and dynamic arguments
        (define z   (map (inst cons Symbol Expr) args es*))
@@ -48,14 +53,14 @@
               (peval-expr body new-env)]
              [else
               (define new-f (string->symbol (format "~a ~a" f sas)))
-              (unless (assq new-f fdefs) ; we specialize once for given inputs
-                (set! fdefs `((,new-f . ,dummy-f) ,@fdefs)) ; placeholder
+              ;; we specialize once for given inputs
+              (unless (dict-has-key? fdefs new-f)
+                (set! fdefs (dict-set fdefs new-f dummy-f)) ; placeholder
                 (define new-body (peval-expr body new-env))
                 ;; replace placeholder with actual definition
-                ;; new version comes before in the list, so no need to remove
-                (set! fdefs `((,new-f . ,(Func (map (inst car Symbol Expr) das)
-                                               new-body))
-                              ,@fdefs)))
+                (set! fdefs (dict-set fdefs new-f
+                                      (Func (map (inst car Symbol Expr) das)
+                                            new-body))))
               ;; apply specialized function
               (Apply new-f (map (inst cdr Symbol Expr) das))])]))
 
@@ -105,7 +110,8 @@
   (check-equal?
    (peval exp-prog2)
    (Prog
-    `((|exp ((n . 3))| .
+    `(,@base-env
+      (|exp ((n . 3))| .
             ,(Func '(x) (Prim '* `(,(Var 'x)
                                    ,(Apply '|exp ((n . 2))| `(,(Var 'x)))))))
       (|exp ((n . 2))| .
@@ -114,12 +120,7 @@
       (|exp ((n . 1))| .
             ,(Func '(x) (Prim '* `(,(Var 'x)
                                    ,(Apply '|exp ((n . 0))| `(,(Var 'x)))))))
-      (|exp ((n . 0))| . ,(Func '(x) (Const 1)))
-      (|exp ((n . 0))| . ,(Func '() (Const #f))) ; dummy defs
-      (|exp ((n . 1))| . ,(Func '() (Const #f)))
-      (|exp ((n . 2))| . ,(Func '() (Const #f)))
-      (|exp ((n . 3))| . ,(Func '() (Const #f)))
-      ,@base-env)
+      (|exp ((n . 0))| . ,(Func '(x) (Const 1))))
     (Apply '|exp ((n . 3))| `(,(Var 'x)))))
 
   (define exp-prog3
@@ -127,14 +128,13 @@
   (check-equal?
    (peval exp-prog3)
    (Prog
-    `((|exp ((x . 2))| .
+    `(,@base-env
+      (|exp ((x . 2))| .
             ,(Func '(n)
                    (If (Prim '= `(,(Var 'n) ,(Const 0)))
                        (Const 1)
                        (Prim '* `(,(Const 2)
                                   ,(Apply '|exp ((x . 2))|
                                           `(,(Prim '- `(,(Var 'n)
-                                                        ,(Const 1))))))))))
-      (|exp ((x . 2))| . ,(Func '() (Const #f))) ; dummy def
-      ,@base-env)
+                                                        ,(Const 1)))))))))))
     (Apply '|exp ((x . 2))| `(,(Var 'n))))))

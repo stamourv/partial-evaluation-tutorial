@@ -2,6 +2,8 @@
 
 (require "exp.rkt")
 (require/typed "prim.rkt" [prim (Op (Listof Val) -> Val)])
+(require/typed racket/dict
+  [dict-ref (All (A) ((Listof (Pair Symbol A)) Symbol (-> A) -> A))])
 
 ;; evaluator (not partial)
 
@@ -14,9 +16,7 @@
   (define: (eval-expr [expr : Expr] [env : Env]) : Val
     (match expr
       [(Const val) val]
-      [(Var var)   (match (assq var env)
-                     [`(,_ . ,val) val]
-                     [#f           (error "unbound variable" var)])]
+      [(Var var) (dict-ref env var (lambda () (error "unbound variable" var)))]
       [(Prim op es)
        (define rs (for/list: : (Listof Val) ([e : Expr es]) (eval-expr e env)))
        (prim op rs)]
@@ -25,10 +25,8 @@
            (eval-expr then env)
            (eval-expr else env))]
       [(Apply f es)
-       (define-values (args body)
-         (match (assq f fdefs)
-           [`(,_ . ,(Func args body)) (values args body)]
-           [#f                        (error "unbound variable" f)]))
+       (match-define (Func args body)
+         (dict-ref fdefs f (lambda () (error "unbound variable" f))))
        (define es*     (map (lambda: ([e : Expr]) (eval-expr e env)) es))
        (define new-env (append (map (inst cons Symbol Val) args es*) env))
        (eval-expr body new-env)]))
